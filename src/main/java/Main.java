@@ -1,7 +1,4 @@
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -9,9 +6,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
-import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -20,13 +15,14 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 public class Main extends Application {
 
     private Stage mainWindow;
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
 
         launch(args);
 
@@ -42,7 +38,7 @@ public class Main extends Application {
 
         Tab search = new Tab("Search");
         search.setClosable(false);
-        VBox searchContent = searchTabContent();
+        VBox searchContent = searchTabContent(mainWindow);
         searchContent.setPadding(new Insets(10,10,10,10));
         search.setContent(searchContent);
 
@@ -52,53 +48,50 @@ public class Main extends Application {
         postContent.setPadding(new Insets(10,10,10,10));
         post.setContent(postContent);
 
-        Tab sortTitle = new Tab("Sort by Title");
-        sortTitle.setClosable(false);
-        VBox sortTitleContent = sortTitleContent();
-        sortTitleContent.setPadding(new Insets(10,10,10,10));
-        sortTitle.setContent(sortTitleContent);
-
-
-        tabPane.getTabs().addAll(search, post, sortTitle);
+        tabPane.getTabs().addAll(search, post);
 
         borderPane.setCenter(tabPane);
 
-        Scene scene = new Scene(borderPane, 500, 600);
+        Scene scene = new Scene(borderPane, 500, 750);
 
         mainWindow.setScene(scene);
 
         mainWindow.show();
 
-        //getRequest();
-
-        //postRequest();
-
     }
 
-    private VBox searchTabContent(){
+    private VBox searchTabContent(Stage stage){
 
         VBox content = new VBox(10);
-        content.setMaxSize(500,600);
+        //content.setMaxSize(500,750);
 
         Label searchLine = new Label("Search 'posts' by: ");
 
         RadioButton id = new RadioButton("ID");
         RadioButton userId = new RadioButton("userID");
         RadioButton title = new RadioButton("title");
+        //RadioButton body = new RadioButton("body");
 
         ToggleGroup searchBy = new ToggleGroup();
         id.setToggleGroup(searchBy);
         userId.setToggleGroup(searchBy);
         title.setToggleGroup(searchBy);
+        //body.setToggleGroup(searchBy);
 
         HBox selection = new HBox(10);
-        selection.getChildren().addAll(id, userId, title/*, commentPostId, commentId, commentName, cemmentEmail*/);
+        selection.getChildren().addAll(id, userId, title);
 
         TextField searchPosts = new TextField();
 
+        CheckBox sortTitle = new CheckBox("Sort by 'title'");
+        CheckBox bodyFilter = new CheckBox("Filter body with key words:");
+
+        TextField bodyFilterField = new TextField();
+
         Button searchPostsButton = new Button("Search Posts");
 
-        Label searchComments = new Label("Search 'comments' by: ");
+        Label searchComments = new Label("\nSearch 'comments' by: \n" +
+                                        "Post ID: ");
 
         RadioButton commentPostId = new RadioButton("Post ID");
         RadioButton commentId = new RadioButton("Comment ID");
@@ -111,7 +104,7 @@ public class Main extends Application {
         commentName.setToggleGroup(searchCommentsBy);
         commentEmail.setToggleGroup(searchCommentsBy);
 
-        TextField postId = new TextField("Post ID");
+        TextField postId = new TextField();
 
         HBox commentSelection = new HBox(10);
         commentSelection.getChildren().addAll(commentPostId, commentId, commentName, commentEmail);
@@ -120,15 +113,18 @@ public class Main extends Application {
 
         Button searchCommentsButton = new Button("Search Comments");
 
-
-        Label searchResult = new Label("Resluts:");
+        Label searchResult = new Label("\nResluts:");
         VBox result = new VBox();
+        result.setMaxHeight(180);
         ScrollPane resultsPane = new ScrollPane();
+        resultsPane.setPadding(new Insets(5,5,5,5));
 
         Text results = new Text();
         resultsPane.setContent(results);
         resultsPane.setHmax(450);
         result.getChildren().addAll(resultsPane);
+
+        Button exportData = new Button("Export to CSV");
 
         searchPostsButton.setOnAction(e -> {
 
@@ -186,11 +182,89 @@ public class Main extends Application {
 
                     in.close();
 
-                    System.out.println("Result: " + response.toString());
-                    results.setText(response.toString());
+                    String responseString = response.toString();
 
+                    Gson gson = new Gson();
+                    Type postsListType = new TypeToken<ArrayList<Posts>>(){}.getType();
+                    ArrayList<Posts> posts = gson.fromJson(responseString, postsListType);
+
+                    if(bodyFilter.isSelected()){
+
+                        ArrayList<Posts> temp = new ArrayList<>();
+
+                        for(Posts p:posts){
+
+                            if(p.getBody().contains(bodyFilterField.getText())){
+
+                                System.out.println(p.toString());
+                                temp.add(p);
+
+                            }
+
+                        }
+
+                        if(sortTitle.isSelected()){
+
+                            Collections.sort(temp);
+                            results.setText(temp.toString());
+
+                            exportData.setOnAction(e1 -> {
+
+                                try {
+                                    export(temp, stage);
+                                }catch (IOException e2){}
+
+                            });
+
+                        }else{
+
+                            results.setText(temp.toString());
+
+                            exportData.setOnAction(e1 -> {
+
+                                try {
+                                    export(temp, stage);
+                                }catch (IOException e2){}
+
+                            });
+
+                        }
+
+                    }else{
+
+                        if(sortTitle.isSelected()){
+
+                            Collections.sort(posts);
+                            results.setText(posts.toString());
+
+                            exportData.setOnAction(e1 -> {
+
+                                try {
+                                    export(posts, stage);
+                                }catch (IOException e2){}
+
+                            });
+
+                        }else{
+
+                            results.setText(posts.toString());
+                            exportData.setOnAction(e1 -> {
+
+                                try {
+                                    export(posts, stage);
+                                }catch (IOException e2){}
+
+                            });
+
+                        }
+
+                    }
 
                 } else {
+
+                    results.setText("Connection unsuccessful. \n" +
+                            "Response code: " + connection.getResponseCode() + "\n" +
+                            "Response message: " + connection.getResponseMessage());
 
                     System.out.println("Not worked");
 
@@ -200,8 +274,6 @@ public class Main extends Application {
 
 
             }
-
-
 
         });
 
@@ -287,10 +359,7 @@ public class Main extends Application {
 
         });
 
-
-
-        content.getChildren().addAll(searchLine, selection, searchPosts, searchPostsButton, searchComments, postId, commentSelection, searchCommentsField, searchCommentsButton, searchResult, result);
-
+        content.getChildren().addAll(searchLine, selection, searchPosts, sortTitle, bodyFilter, bodyFilterField, searchPostsButton, searchComments, postId, commentSelection, searchCommentsField, searchCommentsButton, searchResult, result, exportData);
 
         return content;
 
@@ -321,6 +390,7 @@ public class Main extends Application {
         Label searchResult = new Label("Resluts:");
         VBox result = new VBox();
         ScrollPane resultsPane = new ScrollPane();
+        resultsPane.setPadding(new Insets(5,5,5,5));
 
         Text results = new Text();
         resultsPane.setContent(results);
@@ -329,59 +399,70 @@ public class Main extends Application {
 
         post.setOnAction(e ->{
 
-            String postParams = "{\n" + "\"userID\": " + userIdField.getText() + ", \r\n" +
-                    "   \"id\": " + idField.getText() + ", \r\n" +
-                    "   \"title\": \"" + titleField.getText() + "\", \r\n" +
-                    "   \"body\": \"" + bodyField.getText() + "\" \n}";
+            if(titleField.getText().length() == 0){
 
-            //System.out.println(postParams);
+                results.setText("Please enter a 'title' value.");
 
-            try {
+            }if(bodyField.getText().length() > 400){
 
-                HttpURLConnection postConnection = (HttpURLConnection) urlPost.openConnection();
-                postConnection.setRequestMethod("POST");
-                postConnection.setRequestProperty("Content-Type", "application/json");
+                results.setText("The length of the body exceeds 400 characters.");
 
-                postConnection.setDoOutput(true);
-                OutputStream outputStream = postConnection.getOutputStream();
-                outputStream.write(postParams.getBytes());
-                outputStream.flush();
-                outputStream.close();
+            }else{
 
-                int responseCode = postConnection.getResponseCode();
-                System.out.println("Post response code: " + responseCode);
-                System.out.println("Post response message: " + postConnection.getResponseMessage());
+                String postParams = "{\n" + "\"userID\": " + userIdField.getText() + ", \r\n" +
+                        "   \"id\": " + idField.getText() + ", \r\n" +
+                        "   \"title\": \"" + titleField.getText() + "\", \r\n" +
+                        "   \"body\": \"" + bodyField.getText() + "\" \n}";
 
-                if (responseCode == HttpURLConnection.HTTP_CREATED) {
+                //System.out.println(postParams);
 
-                    BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(postConnection.getInputStream()));
+                try {
 
-                    String input;
-                    StringBuffer response = new StringBuffer();
+                    HttpURLConnection postConnection = (HttpURLConnection) urlPost.openConnection();
+                    postConnection.setRequestMethod("POST");
+                    postConnection.setRequestProperty("Content-Type", "application/json");
 
-                    while ((input = bufferedReader.readLine()) != null) {
+                    postConnection.setDoOutput(true);
+                    OutputStream outputStream = postConnection.getOutputStream();
+                    outputStream.write(postParams.getBytes());
+                    outputStream.flush();
+                    outputStream.close();
 
-                        response.append(input);
+                    int responseCode = postConnection.getResponseCode();
+                    System.out.println("Post response code: " + responseCode);
+                    System.out.println("Post response message: " + postConnection.getResponseMessage());
 
+                    if (responseCode == HttpURLConnection.HTTP_CREATED) {
+
+                        BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(postConnection.getInputStream()));
+
+                        String input;
+                        StringBuffer response = new StringBuffer();
+
+                        while ((input = bufferedReader.readLine()) != null) {
+
+                            response.append(input);
+
+
+                        }
+                        bufferedReader.close();
+
+                        System.out.println(response.toString());
+
+                        results.setText("Post response code: " + responseCode + "\n\n" +
+                                "Post response message: " + postConnection.getResponseMessage() + "\n\n" +
+                                response.toString());
+
+                    } else {
+
+                        System.out.println("Post did not work");
 
                     }
-                    bufferedReader.close();
 
-                    System.out.println(response.toString());
+                } catch (Exception e1) {
 
-                    results.setText("Post response code: " + responseCode + "\n\n" +
-                                    "Post response message: " + postConnection.getResponseMessage() + "\n\n" +
-                                    response.toString());
-
-                } else {
-
-                    System.out.println("Post did not work");
 
                 }
-
-            }catch (Exception e1){
-
-
             }
 
         });
@@ -393,202 +474,46 @@ public class Main extends Application {
 
     }
 
-    private VBox sortTitleContent(){
+    private static void export(ArrayList<Posts> posts, Stage stage) throws IOException{
 
-        VBox content = new VBox(10);
+        FileChooser fileChooser = new FileChooser();
 
-        RadioButton sortAll = new RadioButton("Sort all");
-        RadioButton sortId = new RadioButton("Sort by User ID:");
+        File file = fileChooser.showSaveDialog(stage);
 
-        ToggleGroup sortBy = new ToggleGroup();
-        sortAll.setToggleGroup(sortBy);
-        sortId.setToggleGroup(sortBy);
+        String filePath = null;
 
-        TextField id = new TextField();
+        if(file != null){
 
-        Button sort = new Button("Sort");
-
-        Label searchResult = new Label("Resluts:");
-        VBox result = new VBox();
-        ScrollPane resultsPane = new ScrollPane();
-
-        Text results = new Text();
-        resultsPane.setContent(results);
-        resultsPane.setHmax(450);
-        result.getChildren().addAll(resultsPane);
-
-        sort.setOnAction(e -> {
-
-            URL urlGet = null;
-
-            try {
-
-                if (sortAll.isSelected()) {
-
-                    urlGet = new URL("https://jsonplaceholder.typicode.com/posts/");
-
-                }
-                if (sortId.isSelected()) {
-
-                    urlGet = new URL("https://jsonplaceholder.typicode.com/posts?userId=" + id.getText());
-
-                }
-
-                String line = null;
-
-                HttpURLConnection connection = (HttpURLConnection) urlGet.openConnection();
-                connection.setRequestMethod("GET");
-                //connection.setRequestProperty("userID", "abcdef");
-                int responseCode = connection.getResponseCode();
-
-                if(responseCode == HttpURLConnection.HTTP_OK) {
-
-                    BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-
-                    StringBuffer response = new StringBuffer();
-
-                    while ((line = in.readLine()) != null) {
-
-                        response.append(line + "\n");
-
-                    }
-
-                    in.close();
-
-                    //System.out.println("Result: " + response.toString());
-
-                    String responseString = response.toString();
-
-                    Gson gson = new Gson();
-                    Type postsListType = new TypeToken<ArrayList<Posts>>(){}.getType();
-                    ArrayList<Posts> posts = gson.fromJson(responseString, postsListType);
-
-                    Collections.sort(posts);
-
-                    results.setText(posts.toString());
-
-                    for(Posts p:posts){
-
-                        System.out.println(p);
-                    }
-
-                }else{
-
-                    System.out.println("Not worked");
-
-                }
-
-
-
-            }catch (Exception e1){
-
-            }
-
-        });
-
-        content.getChildren().addAll(sortAll, sortId, id, sort, searchResult, result);
-
-        return content;
-
-    }
-
-    public static void getRequest() throws IOException{
-
-        URL urlGet = new URL("https://jsonplaceholder.typicode.com/posts?id=1");
-
-        //URL urlGet = new URL("https://my-json-server.typicode.com/AfzalIsmail/restApi_test/posts/" );
-
-        String line = null;
-
-        HttpURLConnection connection = (HttpURLConnection) urlGet.openConnection();
-        connection.setRequestMethod("GET");
-        //connection.setRequestProperty("userID", "abcdef");
-        int responseCode = connection.getResponseCode();
-
-        if(responseCode == HttpURLConnection.HTTP_OK){
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-
-            StringBuffer response = new StringBuffer();
-
-            while((line = in.readLine()) != null){
-
-                response.append(line + "\n");
-
-            }
-
-            in.close();
-
-            System.out.println("Result: " + response.toString());
-
-            String responseString = response.toString();
-
-            Gson gson = new Gson();
-            Posts object = gson.fromJson(responseString,Posts.class);
-
-            System.out.println(object.getId());
-            System.out.println(object.getUserId());
-            System.out.println(object.getTitle());
-            System.out.println(object.getBody());
-
-
-
-        }else{
-
-            System.out.println("Not worked");
+            filePath = file.getPath();
 
         }
 
-    }
+        FileWriter fileWriter = new FileWriter(filePath);
 
-    public static void postRequest()throws IOException{
+        fileWriter.append("UserID");
+        fileWriter.append(",");
+        fileWriter.append("ID");
+        fileWriter.append(",");
+        fileWriter.append("title");
+        fileWriter.append(",");
+        fileWriter.append("body");
+        fileWriter.append("\n");
 
-        //URL urlPost = new URL("https://jsonplaceholder.typicode.com/posts/33");
+        for(Posts p:posts){
 
-        URL urlPost = new URL("https://my-json-server.typicode.com/AfzalIsmail/restApi_test/posts/" );
-
-        String postParams = "{\n" + "\"userID\": 101, \r\n" +
-                "   \"id\": 101, \r\n" +
-                "   \"title\": \"Test Title\", \r\n" +
-                "   \"body\": \"Test Body\"" + "\n}";
-
-        System.out.println(postParams);
-
-        HttpURLConnection postConnection = (HttpURLConnection) urlPost.openConnection();
-        postConnection.setRequestMethod("POST");
-        postConnection.setRequestProperty("Content-Type", "application/json");
-
-        postConnection.setDoOutput(true);
-        OutputStream outputStream = postConnection.getOutputStream();
-        outputStream.write(postParams.getBytes());
-        outputStream.flush();
-        outputStream.close();
-
-        int responseCode = postConnection.getResponseCode();
-        System.out.println("Post response code: " + responseCode);
-        System.out.println("Post response message: " + postConnection.getResponseMessage());
-
-        if(responseCode == HttpURLConnection.HTTP_CREATED){
-
-            BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(postConnection.getInputStream()));
-
-            String input;
-            StringBuffer response = new StringBuffer();
-
-            while ((input = bufferedReader.readLine()) != null){
-
-                response.append(input);
-
-
-            }bufferedReader.close();
-
-            System.out.println(response.toString());
-
-        }else{
-
-            System.out.println("Post did not work");
+            fileWriter.append(Integer.toString(p.getUserId()));
+            fileWriter.append(",");
+            fileWriter.append(Integer.toString(p.getId()));
+            fileWriter.append(",");
+            fileWriter.append(p.getTitle());
+            fileWriter.append(",");
+            fileWriter.append(p.getBody());
+            fileWriter.append("\n");
 
         }
+
+        fileWriter.flush();
+        fileWriter.close();
 
     }
 
